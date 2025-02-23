@@ -1,45 +1,75 @@
+import os
+import pickle
+import numpy as np
+import tensorflow as tf
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import pickle
-from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing.sequence import pad_sequences
 
+# Initialize Flask app
 app = Flask(__name__)
-CORS(app)  # Enable CORS so your Chrome extension can fetch from this API
+CORS(app)  # Allow requests from Chrome extension
 
-# Load the Keras model and the tokenizer
-model = load_model('model.h5')
-with open('tokenizer.pkl', 'rb') as file:
-    tokenizer = pickle.load(file)
+# Paths
+MODEL_PATH = r"C:\Users\sarve\Desktop\testing_repo\TeanX-main\backend\ML\bidirectional_lstm_model.h5"
+TOKENIZER_PATH = r"C:\Users\sarve\Desktop\testing_repo\TeanX-main\backend\ML\notebooks\pickleFiles\models\tokenizer.pkl"
 
-# Set the maximum sequence length (adjust this value to match your training configuration)
-MAX_SEQUENCE_LENGTH = 100
+# Load Tokenizer
+try:
+    with open(TOKENIZER_PATH, "rb") as handle:
+        tokenizer = pickle.load(handle)
+    print("✅ Tokenizer Loaded Successfully")
+except Exception as e:
+    print(f"❌ Error loading tokenizer: {e}")
 
-@app.route('/predict', methods=['POST'])
-def predict():
-    # Expect JSON data with a "text" field
-    data = request.get_json(force=True)
-    text = data.get('text', None)
-    
-    if text is None:
-        return jsonify({'error': 'No text provided.'}), 400
+# Load Model
+try:
+    model = tf.keras.models.load_model(MODEL_PATH)
+    print("✅ Model Loaded Successfully")
+except Exception as e:
+    print(f"❌ Error loading model: {e}")
 
-    # Convert the text to a sequence using the tokenizer
+# Function to preprocess text
+def preprocess_text(text):
+    """Tokenizes input text and pads it for model prediction."""
+    from tensorflow.keras.preprocessing.sequence import pad_sequences
     sequences = tokenizer.texts_to_sequences([text])
-    padded_sequences = pad_sequences(sequences, maxlen=MAX_SEQUENCE_LENGTH)
-    
-    # Get the prediction from the model
-    prediction = model.predict(padded_sequences)
-    
-    # Process the prediction as needed
-    # Example: For binary classification, converting probability to class label
-    predicted_class = int(prediction[0] > 0.5)
+    padded = pad_sequences(sequences, maxlen=300)  # Adjust maxlen as per training
+    return padded
 
-    return jsonify({
-        'prediction': predicted_class,
-        'raw_prediction': prediction[0].tolist()
-    })
+# API Route to Analyze News
+@app.route('/analyze', methods=['POST'])
+def analyze_news():
+    """Predicts news credibility and returns a message."""
+    try:
+        data = request.get_json()
+        text = data.get("text", "")
 
-if __name__ == '__main__':
-    # Set debug=False for production
-    app.run(host='0.0.0.0', port=5000, debug=True)
+        if not text:
+            return jsonify({"error": "No text provided"}), 400
+
+        # Preprocess text
+        input_data = preprocess_text(text)
+
+        # Predict using ML model
+        prediction = model.predict(input_data)[0][0]  # Assuming output is a probability
+
+        # Convert probability to credibility score
+        credibility_score = int(prediction * 100)  # Scale to 0-100
+
+        # Determine credibility message
+        if credibility_score >= 50:
+            credibility_message = "Looks Real"
+        else:
+            credibility_message = "Looks False"
+
+        return jsonify({
+            "prediction": credibility_message,
+            "credibility_score": credibility_score
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Run Flask App
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)

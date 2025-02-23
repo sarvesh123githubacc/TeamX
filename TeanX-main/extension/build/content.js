@@ -1,34 +1,30 @@
-// Function to extract news content from the webpage
 function extractNewsData() {
     let title = document.querySelector("h1")?.innerText || "Untitled";
-    let source = window.location.hostname; // Extracts domain name
+    let source = window.location.hostname; // Extract domain name
     let articleText = "";
 
-    // Try extracting paragraphs
+    // Extract text from paragraphs
     let paragraphs = document.querySelectorAll("article p, div p");
     paragraphs.forEach((p) => {
         articleText += p.innerText + " ";
     });
 
     if (articleText.length < 50) {
-        console.warn("Insufficient news content extracted.");
+        console.warn("⚠️ Insufficient news content extracted.");
         return;
     }
 
-    // Send extracted data to background script
+    // Send extracted data to background.js for AI analysis
     chrome.runtime.sendMessage({
         type: "NEWS_DATA",
-        payload: {
-            title,
-            source,
-            articleText
-        }
+        payload: { title, source, text: articleText }
     });
 
-    console.log("News data sent for analysis:", { title, source });
+    console.log("✅ News data sent for analysis:", { title, source, text: articleText });
 }
 
-// Run extraction when the page loads
+// Run extraction after page loads
 window.addEventListener("load", () => {
-    setTimeout(extractNewsData, 3000); // Delay to allow page content to load
+    setTimeout(extractNewsData, 3000); // Delay for content to load
 });
+
